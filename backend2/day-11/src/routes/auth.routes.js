@@ -1,22 +1,23 @@
 const express = require("express");
-const userModel = require("../models/user.model");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const authRouter = express.Router();
+const userModel = require("../models/user.model");
 
-authRouter.post("/register", async (req, res) => {
-  const { uname, email, password } = req.body;
+const authRoutes = express.Router();
+
+authRoutes.post("/register", async (req, res) => {
+  const { username, email, password } = req.body;
 
   const isUserAlreadyExists = await userModel.findOne({ email });
 
   if (isUserAlreadyExists) {
-    return res.status(409).json({
-      message: "with email user already exists",
+    return res.status(404).json({
+      message: "with user already exists",
     });
   }
 
   const user = await userModel.create({
-    uname,
+    username,
     email,
     password: crypto.createHash("md5").update(password).digest("hex"),
   });
@@ -26,55 +27,64 @@ authRouter.post("/register", async (req, res) => {
       id: user._id,
       email: user.email,
     },
-    process.env.JWT_TOKEN,
-    { expiresIn: "1h" },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: "1d",
+    },
   );
 
   res.cookie("jwt_token", token);
 
   res.status(201).json({
-    message: "user register successfully",
+    message: "user Register Successfully",
     user,
     token,
   });
 });
 
-authRouter.get("/get-me", async (req, res) => {
+authRoutes.get("/get-me", async (req, res) => {
   const token = req.cookies.jwt_token;
 
-  const decoded = jwt.verify(token, process.env.JWT_TOKEN);
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
   const user = await userModel.findById(decoded.id);
+  console.log(decoded.id);
+
   res.json({
-    name: user.uname,
-    email: user.email,
+    user: {
+      user: user.username,
+      email: user.email,
+    },
   });
 });
 
-authRouter.post("/login", async (req, res) => {
+authRoutes.post("/login", async (req, res) => {
   const { email, password } = req.body;
+
   const user = await userModel.findOne({ email });
+
   if (!user) {
-    res.status(409).json({
-      message: "user not found",
+    return res.status(404).json({
+      message: "User Not Found",
     });
   }
 
   const hash = crypto.createHash("md5").update(password).digest("hex");
 
-  const isPasswordValid = hash === user.password;
+  const isPasswordMatched = hash === user.password;
 
-  if (!isPasswordValid) {
-    return res.status(401).json({
-      message: " invaild password",
+  if (!isPasswordMatched) {
+    res.status(404).json({
+      message: "Invaild password",
     });
   }
 
   const token = jwt.sign(
     {
       id: user._id,
+      email: user.email,
     },
-    process.env.JWT_TOKEN,
+    process.env.JWT_SECRET,
     {
       expiresIn: "1h",
     },
@@ -83,12 +93,12 @@ authRouter.post("/login", async (req, res) => {
   res.cookie("token", token);
 
   res.status(200).json({
-    message: "user logged in successfuly",
+    message: "User Logged In Successfully",
     user: {
-      user: user.uname,
+      user: user.username,
       email: user.email,
     },
   });
 });
 
-module.exports = authRouter;
+module.exports = authRoutes;
